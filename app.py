@@ -1,8 +1,9 @@
 from pathlib import Path
+import pandas as pd
 import PIL
 import streamlit as st
 import settings
-import helper
+from helper import load_model, get_image_download_buffer
 
 # Configuración del diseño de la página
 st.set_page_config(
@@ -18,23 +19,25 @@ st.sidebar.header("Configuración del modelo")
 # Crear un grupo de botones de opción
 option = st.sidebar.selectbox(
     "Seleccione un modelo",
-    ('Yolov8',)
+    ('Yolov8n', 'Yolov8x')
 )
 
 # Ruta del modelo de detección
 model_path = ''
-if (option == 'Yolov8'):
-    model_path = Path(settings.DETECTION_MODEL)
+if (option == 'Yolov8n'):
+    model_path = Path(settings.DETECTION_MODEL_YOLOV8N)
+if (option == 'Yolov8x'):
+    model_path = Path(settings.DETECTION_MODEL_YOLOV8X)
 
 # Cargar el modelo preentrenado
 try:
-    model = helper.load_model(model_path)
+    model = load_model(model_path)
 except Exception as ex:
     st.error(f"No se pudo cargar el modelo. Verifique la ruta especificada: {model_path}")
     st.error(ex)
 
 # Título de la página principal
-st.title("Detección de DFU utilizando YOLOv8")
+st.title("Detección de DFU")
 
 # Opciones del modelo
 confidence = float(st.sidebar.slider(
@@ -70,22 +73,48 @@ if source_img is not None:
         if 'res_plotted' in st.session_state:  # Verifica si hay una imagen procesada
             st.image(st.session_state.res_plotted, caption='Ulceraciones detectadas',
                     use_column_width=True)  # Muestra la imagen procesada
-            try:
-                # Expande para mostrar los resultados de las cajas detectadas
-                with st.expander("Resultados de la detección"):
-                    for box in st.session_state.boxes:
-                        st.write(box.data)
-                
-                # Agrega un botón para descarga la imagen
-                buffered = helper.get_image_download_buffer(st.session_state.res_plotted)  # Convierte la imagen a un buffer descargable
-                st.download_button(
-                    label="Descargar imagen",
-                    data=buffered,
-                    file_name=f"detected_{source_img.name}",
-                    mime="image/jpeg"
-                )
-            except Exception as ex:
-                st.write("¡No se ha subido ninguna imagen aún!")
+
+            if st.session_state.boxes:  # Verifica si hay cajas detectadas
+                try:
+                    # Expande para mostrar los resultados de las cajas detectadas
+                    with st.expander("Resultados de la detección"):
+                        all_data = []  # Crear una lista vacía para almacenar laas coordenadas
+
+                        # Iterar sobre cada caja y agregar a la lista
+                        for box in st.session_state.boxes:
+                            all_data.extend(box.data.tolist())
+
+                        # Crear un DataFrame de pandas a partir de la lista de datos
+                        df = pd.DataFrame(all_data, columns=['xmin', 'ymin', 'xmax', 'ymax', 'confidence', 'class'])
+
+                        # Aplicar formato de dos decimales a las columnas flotantes
+                        df['xmin'] = df['xmin'].map(lambda x: f"{x:.2f}")
+                        df['ymin'] = df['ymin'].map(lambda x: f"{x:.2f}")
+                        df['xmax'] = df['xmax'].map(lambda x: f"{x:.2f}")
+                        df['ymax'] = df['ymax'].map(lambda x: f"{x:.2f}")
+                        df['confidence'] = df['confidence'].map(lambda x: f"{x:.2f}")
+
+                        # Mostrar la tabla en Streamlit con las conversiones aplicadas
+                        st.table(df[['xmin', 'ymin', 'xmax', 'ymax', 'confidence']])
+
+                    # Agrega un botón para descarga la imagen
+                    buffered = get_image_download_buffer(st.session_state.res_plotted)  # Convierte la imagen a un buffer descargable
+                    st.download_button(
+                        label="Descargar imagen",
+                        data=buffered,
+                        file_name=f"detected_{source_img.name}",
+                        mime="image/jpeg"
+                    )
+                except Exception as ex:
+                    st.error("¡No se ha subido ninguna imagen aún!")
+                    st.error(ex)
+            else:
+                st.markdown(
+                "<div style='background-color: #f0f2f8; font-size: 18px; display: flex; justify-content: center; align-items: center; padding: 12px 0; gap: 15px; border-radius: 8px;'>"
+                    "No se han detectado ulceraciones"
+                "</div>",
+                unsafe_allow_html=True
+    )
 else:
     svg_code = '''
         <svg xmlns="http://www.w3.org/2000/svg" fill="gray" viewBox="0 0 24 24" width="30" height="30">
