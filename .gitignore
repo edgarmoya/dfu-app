@@ -36,5 +36,3 @@ venv.bak/
 # Otros
 *.DS_Store
 Thumbs.db
-
-weights/*.pt
