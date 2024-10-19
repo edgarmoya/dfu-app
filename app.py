@@ -1,13 +1,12 @@
 from pathlib import Path
-import pandas as pd
 import PIL
 import streamlit as st
 import settings
-from helper import load_model, get_image_download_buffer
+from helper import load_model, get_image_download_buffer, draw_bounding_boxes
 
 # Configuración del diseño de la página
 st.set_page_config(
-    page_title="Detección de DFU",
+    page_title="Detección de UPD",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -16,18 +15,8 @@ st.set_page_config(
 # Barra lateral
 st.sidebar.header("Configuración del modelo")
 
-# Crear un grupo de botones de opción
-option = st.sidebar.selectbox(
-    "Seleccione un modelo",
-    ('Yolov8n', 'Yolov8x')
-)
-
 # Ruta del modelo de detección
-model_path = ''
-if (option == 'Yolov8n'):
-    model_path = Path(settings.DETECTION_MODEL_YOLOV8N)
-if (option == 'Yolov8x'):
-    model_path = Path(settings.DETECTION_MODEL_YOLOV8X)
+model_path = Path(settings.DETECTION_MODEL_YOLOV8L)
 
 # Cargar el modelo preentrenado
 try:
@@ -37,15 +26,18 @@ except Exception as ex:
     st.error(ex)
 
 # Título de la página principal
-st.title("Detección de DFU")
+st.title("Detección de UPD")
 
 # Opciones del modelo
 confidence = float(st.sidebar.slider(
-    "Seleccionar confianza del modelo", 25, 100, 40)) / 100  # Control deslizante para la confianza del modelo
+    "Seleccionar confianza de detección", 0, 100, 30, help='Probabilidad de certeza en la detección de la úlcera')) / 100  # Control deslizante para la confianza del modelo
+
+# NMS
+iou_thres = 0.5
 
 # Cargador de archivos para seleccionar imágenes
 source_img = st.sidebar.file_uploader(
-    "Elige una imagen", type=("jpg", "jpeg", "png", 'bmp'))
+    "Seleccionar una imagen", help='Ayuda', type=("jpg", "jpeg", "png"), )
 
 if source_img is not None:
     st.session_state.clear()  # Limpia el estado de la sesión
@@ -57,64 +49,44 @@ if source_img is not None:
         try:
             # Abrir y mostrar la imagen subida por el usuario
             uploaded_image = PIL.Image.open(source_img)
-            st.image(source_img, caption="Imagen original",
-                    use_column_width=True)
+            st.image(source_img, caption="Imagen original", use_column_width='auto')
         except Exception as ex:
             st.error("Ocurrió un error al abrir la imagen.")
             st.error(ex)
 
     with col2:
-        detect_button = st.sidebar.button('Detectar DFU')  # Botón para iniciar la detección
+        detect_button = st.sidebar.button('Detectar UPD', use_container_width=True)  # Botón para iniciar la detección
         if 'res_plotted' not in st.session_state and detect_button:  # Verifica si la imagen detectada no está en el estado
-            res = model.predict(uploaded_image, conf=confidence)  # Realiza la detección utilizando el modelo
+            res = model.predict(uploaded_image, conf=confidence, iou=iou_thres)  # Realiza la detección utilizando el modelo
             st.session_state.boxes = res[0].boxes  # Almacena las cajas detectadas en el estado de la sesión
-            st.session_state.res_plotted = res[0].plot()[:, :, ::-1]  # Almacena la imagen procesada
+            st.session_state.res_plotted = draw_bounding_boxes(uploaded_image, res, {0: 'UPD'})
+            # st.session_state.res_plotted = res[0].plot()[:, :, ::-1]  # Almacena la imagen procesada
 
         if 'res_plotted' in st.session_state:  # Verifica si hay una imagen procesada
-            st.image(st.session_state.res_plotted, caption='Ulceraciones detectadas',
-                    use_column_width=True)  # Muestra la imagen procesada
+            st.image(st.session_state.res_plotted, caption='Ulceraciones detectadas', use_column_width=True)  # Muestra la imagen procesada
 
             if st.session_state.boxes:  # Verifica si hay cajas detectadas
                 try:
-                    # Expande para mostrar los resultados de las cajas detectadas
-                    with st.expander("Resultados de la detección"):
-                        all_data = []  # Crear una lista vacía para almacenar laas coordenadas
-
-                        # Iterar sobre cada caja y agregar a la lista
-                        for box in st.session_state.boxes:
-                            all_data.extend(box.data.tolist())
-
-                        # Crear un DataFrame de pandas a partir de la lista de datos
-                        df = pd.DataFrame(all_data, columns=['xmin', 'ymin', 'xmax', 'ymax', 'confidence', 'class'])
-
-                        # Aplicar formato de dos decimales a las columnas flotantes
-                        df['xmin'] = df['xmin'].map(lambda x: f"{x:.2f}")
-                        df['ymin'] = df['ymin'].map(lambda x: f"{x:.2f}")
-                        df['xmax'] = df['xmax'].map(lambda x: f"{x:.2f}")
-                        df['ymax'] = df['ymax'].map(lambda x: f"{x:.2f}")
-                        df['confidence'] = df['confidence'].map(lambda x: f"{x:.2f}")
-
-                        # Mostrar la tabla en Streamlit con las conversiones aplicadas
-                        st.table(df[['xmin', 'ymin', 'xmax', 'ymax', 'confidence']])
-
-                    # Agrega un botón para descarga la imagen
-                    buffered = get_image_download_buffer(st.session_state.res_plotted)  # Convierte la imagen a un buffer descargable
+                    # Agrega un botón para descarga la imagen  
                     st.download_button(
+                        use_container_width=True,
                         label="Descargar imagen",
-                        data=buffered,
-                        file_name=f"detected_{source_img.name}",
+                        data=get_image_download_buffer(st.session_state.res_plotted),  # Convierte la imagen a un buffer descargable
+                        file_name=f"det_{source_img.name}",
                         mime="image/jpeg"
                     )
                 except Exception as ex:
                     st.error("¡No se ha subido ninguna imagen aún!")
                     st.error(ex)
             else:
+                # st.info('No se han detectado ulceraciones', icon="ℹ️")
+                st.toast('hola')
                 st.markdown(
                 "<div style='background-color: #f0f2f8; font-size: 18px; display: flex; justify-content: center; align-items: center; padding: 12px 0; gap: 15px; border-radius: 8px;'>"
                     "No se han detectado ulceraciones"
                 "</div>",
                 unsafe_allow_html=True
-    )
+                )
 else:
     svg_code = '''
         <svg xmlns="http://www.w3.org/2000/svg" fill="gray" viewBox="0 0 24 24" width="30" height="30">
