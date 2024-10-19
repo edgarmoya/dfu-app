@@ -37,7 +37,7 @@ iou_thres = 0.5
 
 # Cargador de archivos para seleccionar imágenes
 source_img = st.sidebar.file_uploader(
-    "Seleccionar una imagen", help='Ayuda', type=("jpg", "jpeg", "png"), )
+    "Seleccionar una imagen", help='Imagen del pie que se deasea analizar', type=("jpg", "jpeg", "png"), )
 
 if source_img is not None:
     st.session_state.clear()  # Limpia el estado de la sesión
@@ -80,7 +80,6 @@ if source_img is not None:
                     st.error(ex)
             else:
                 # st.info('No se han detectado ulceraciones', icon="ℹ️")
-                st.toast('hola')
                 st.markdown(
                 "<div style='background-color: #f0f2f8; font-size: 18px; display: flex; justify-content: center; align-items: center; padding: 12px 0; gap: 15px; border-radius: 8px;'>"
                     "No se han detectado ulceraciones"
