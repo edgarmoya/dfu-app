@@ -16,13 +16,13 @@ st.set_page_config(
 st.sidebar.header("Configuración del modelo")
 
 # Ruta del modelo de detección
-model_path = Path(settings.DETECTION_MODEL_YOLOV8L)
+detection_model_path = Path(settings.DETECTION_MODEL)
 
-# Cargar el modelo preentrenado
+# Cargar el modelo
 try:
-    model = load_model(model_path)
+    model = load_model(detection_model_path)
 except Exception as ex:
-    st.error(f"No se pudo cargar el modelo. Verifique la ruta especificada: {model_path}")
+    st.error(f"No se pudo cargar el modelo. Verifique la ruta especificada: {detection_model_path}")
     st.error(ex)
 
 # Título de la página principal
@@ -37,7 +37,7 @@ iou_thres = 0.5
 
 # Cargador de archivos para seleccionar imágenes
 source_img = st.sidebar.file_uploader(
-    "Seleccionar una imagen", help='Imagen del pie que se deasea analizar', type=("jpg", "jpeg", "png"), )
+    "Seleccionar una imagen", help='Imagen del pie que desea analizar', type=("jpg", "jpeg", "png"), )
 
 if source_img is not None:
     st.session_state.clear()  # Limpia el estado de la sesión
@@ -79,22 +79,16 @@ if source_img is not None:
                     st.error("¡No se ha subido ninguna imagen aún!")
                     st.error(ex)
             else:
-                # st.info('No se han detectado ulceraciones', icon="ℹ️")
-                st.markdown(
-                "<div style='background-color: #f0f2f8; font-size: 18px; display: flex; justify-content: center; align-items: center; padding: 12px 0; gap: 15px; border-radius: 8px;'>"
-                    "No se han detectado ulceraciones"
-                "</div>",
-                unsafe_allow_html=True
-                )
+                st.info('No se han detectado ulceraciones', icon="ℹ️")
 else:
     svg_code = '''
-        <svg xmlns="http://www.w3.org/2000/svg" fill="gray" viewBox="0 0 24 24" width="30" height="30">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="gray" viewBox="0 0 24 24" width="24" height="24">
             <circle cx="16" cy="8.011" r="2.5"/><path d="M23,16a1,1,0,0,0-1,1v2a3,3,0,0,1-3,3H17a1,1,0,0,0,0,2h2a5.006,5.006,0,0,0,5-5V17A1,1,0,0,0,23,16Z"/><path d="M1,8A1,1,0,0,0,2,7V5A3,3,0,0,1,5,2H7A1,1,0,0,0,7,0H5A5.006,5.006,0,0,0,0,5V7A1,1,0,0,0,1,8Z"/><path d="M7,22H5a3,3,0,0,1-3-3V17a1,1,0,0,0-2,0v2a5.006,5.006,0,0,0,5,5H7a1,1,0,0,0,0-2Z"/><path d="M19,0H17a1,1,0,0,0,0,2h2a3,3,0,0,1,3,3V7a1,1,0,0,0,2,0V5A5.006,5.006,0,0,0,19,0Z"/><path d="M18.707,17.293,11.121,9.707a3,3,0,0,0-4.242,0L4.586,12A2,2,0,0,0,4,13.414V16a3,3,0,0,0,3,3H18a1,1,0,0,0,.707-1.707Z"/>
         </svg>
     '''
 
     st.markdown(
-        "<div style='background-color: #f0f2f8; font-size: 18px; display: flex; justify-content: center; align-items: center; padding: 12px 0; gap: 15px; border-radius: 8px;'>"
+        "<div style='background-color: #f0f2f8; font-size: 16px; display: flex; justify-content: center; align-items: center; padding: 12px 0; gap: 15px; border-radius: 8px;'>"
             f"{svg_code}"
             "No ha seleccionado una imagen para su procesamiento"
         "</div>",

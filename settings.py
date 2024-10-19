@@ -13,7 +13,5 @@ ROOT = ROOT.relative_to(Path.cwd())
 
 # Directorio donde se almacenan los modelos
 MODEL_DIR = ROOT / 'weights'
-DETECTION_MODEL_YOLOV8N = MODEL_DIR / 'yolov8n.pt'
-DETECTION_MODEL_YOLOV8M = MODEL_DIR / 'yolov8m.pt'
-DETECTION_MODEL_YOLOV8L = MODEL_DIR / 'yolov8l.pt'
-DETECTION_MODEL_YOLOV8X = MODEL_DIR / 'yolov8x.pt'
+DETECTION_MODEL = MODEL_DIR / 'det_model.pt'
+CLASS_MODEL = MODEL_DIR / 'class_model.h5'
