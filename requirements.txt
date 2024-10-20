@@ -3,5 +3,6 @@ numpy
 opencv_python
 opencv_python_headless
 Pillow
-streamlit==1.33.0
+st_theme==1.2.3
+streamlit==1.39.0
 ultralytics==8.2.58

@@ -1,13 +1,14 @@
 from pathlib import Path
 import PIL
 import streamlit as st
+from streamlit_theme import st_theme
 import settings
 from helper import load_model, get_image_download_buffer, draw_bounding_boxes
 
 # Configuración del diseño de la página
 st.set_page_config(
     page_title="Detección de UPD",
-    page_icon="🤖",
+    page_icon="🦶",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -55,7 +56,7 @@ if source_img is not None:
             st.error(ex)
 
     with col2:
-        detect_button = st.sidebar.button('Detectar UPD', use_container_width=True)  # Botón para iniciar la detección
+        detect_button = st.sidebar.button('Analizar imagen', use_container_width=True)  # Botón para iniciar la detección
         if 'res_plotted' not in st.session_state and detect_button:  # Verifica si la imagen detectada no está en el estado
             res = model.predict(uploaded_image, conf=confidence, iou=iou_thres)  # Realiza la detección utilizando el modelo
             st.session_state.boxes = res[0].boxes  # Almacena las cajas detectadas en el estado de la sesión
