@@ -4,6 +4,12 @@ import PIL
 import settings
 from helper import load_model, get_image_download_buffer, draw_bounding_boxes
 
+def clear_session() -> None:
+    if 'res_plotted' in st.session_state:
+        del st.session_state.res_plotted
+    if 'boxes' in st.session_state:
+        del st.session_state.boxes
+
 # Configuración del diseño de la página
 st.set_page_config(
     page_title="UPD",
@@ -15,9 +21,14 @@ st.set_page_config(
 # Barra lateral
 st.sidebar.header("Configuración del modelo")
 
-# Opciones del modelo
-confidence = float(st.sidebar.slider(
-    "Seleccionar confianza de detección", 0, 100, 30, help='Probabilidad de certeza en la detección de la úlcera')) / 100  # Control deslizante para la confianza del modelo
+# Control deslizante para la confianza del modelo
+confidence = float(st.sidebar.slider( 
+    label="Seleccionar confianza de detección",
+    min_value=0,
+    max_value=100, 
+    value=30,
+    help='Probabilidad de certeza en la detección de la úlcera', 
+    on_change=clear_session())) / 100
 
 # NMS
 iou_thres = 0.5
@@ -45,11 +56,7 @@ except Exception as ex:
 # Verificar si la imagen original ha cambiado
 if 'uploaded_image' in st.session_state:
     if source_img is not None and st.session_state.uploaded_image != source_img:
-        # st.session_state.clear()  # Limpia el estado de la sesión
-        if 'res_plotted' in st.session_state:
-            del st.session_state.res_plotted
-        if 'boxes' in st.session_state:
-            del st.session_state.boxes
+        clear_session()  # Limpia el estado de la sesión
 
 if source_img is not None:
     st.session_state.uploaded_image = source_img
