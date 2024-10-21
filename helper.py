@@ -41,7 +41,7 @@ def get_image_download_buffer(img_array: np.ndarray) -> BytesIO:
     buffered.seek(0)
     return buffered
 
-def draw_bounding_boxes(image, results, classes):
+def draw_bounding_boxes(image: np.ndarray, results: List, classes: Dict[int, str]) -> np.ndarray:
     """
     Dibuja los cuadros delimitadores en la imagen según los resultados de la predicción.
 
