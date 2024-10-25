@@ -73,7 +73,8 @@ def draw_bounding_boxes(image: np.ndarray, results: List, classes: Dict[int, str
             # Obtener un color del colormap normalizado para este cuadro
             cmap_color = cmap(i / len(boxes))  
             color = (int(cmap_color[2] * 255), int(cmap_color[1] * 255), int(cmap_color[0] * 255))  # Convertir a BGR
-
+            color = (124, 80, 0)
+            
             # Obtener la nueva etiqueta de clase mapeada desde el diccionario
             new_label = classes.get(cls, 'None')  # Si no existe la clase, asignar 'None'
 

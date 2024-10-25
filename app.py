@@ -22,13 +22,21 @@ st.set_page_config(
 st.sidebar.header("Configuración del modelo")
 
 # Control deslizante para la confianza del modelo
-confidence = float(st.sidebar.slider( 
+if 'confidence' not in st.session_state:
+    st.session_state.confidence = 30  # Valor inicial
+
+# Control deslizante para la confianza del modelo
+confidence = st.sidebar.slider( 
     label="Seleccionar confianza de detección",
     min_value=0,
     max_value=100, 
-    value=30,
-    help='Probabilidad de certeza en la detección de la úlcera', 
-    on_change=clear_session())) / 100
+    value=st.session_state.confidence,
+    help='Probabilidad de certeza en la detección de la úlcera')
+
+# Revisa si ha cambiado el valor y ejecuta clear_session
+if confidence != st.session_state.confidence:
+    st.session_state.confidence = confidence
+    clear_session()
 
 # NMS
 iou_thres = 0.5
@@ -76,8 +84,9 @@ if source_img is not None:
     with col2:
         detect_button = st.sidebar.button('Analizar imagen', use_container_width=True)  # Botón para iniciar la detección
 
+        conf = confidence / 100
         if 'res_plotted' not in st.session_state and detect_button:  # Verifica si la imagen detectada no está en el estado
-            res = model.predict(uploaded_image, conf=confidence, iou=iou_thres)  # Realiza la detección utilizando el modelo
+            res = model.predict(uploaded_image, conf=conf, iou=iou_thres)  # Realiza la detección utilizando el modelo
             st.session_state.boxes = res[0].boxes  # Almacena las cajas detectadas en el estado de la sesión
             st.session_state.res_plotted = draw_bounding_boxes(uploaded_image, res, {0: 'UPD'})
 
