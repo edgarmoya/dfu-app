@@ -4,6 +4,7 @@ import PIL
 import settings
 import zipfile
 import io
+import csv
 from helper import load_model, get_image_download_buffer, draw_bounding_boxes
 
 def clear_session() -> None:
@@ -11,7 +12,20 @@ def clear_session() -> None:
         st.session_state.uploaded_images = []
     if 'processed_images' in st.session_state:
         st.session_state.processed_images = []  # Limpiar imágenes procesadas
-    st.session_state.analyzed = False  # Controla el procesamiento
+
+def write_csv(processed_images):
+    # Crear un archivo CSV con las coordenadas de las cajas
+    csv_buffer = io.StringIO()
+    csv_writer = csv.writer(csv_buffer)
+    csv_writer.writerow(['filename', 'xmin', 'ymin', 'xmax', 'ymax'])
+
+    for img in processed_images:
+        # Agregar las coordenadas al CSV
+        for box in img['boxes']:
+            xmin, ymin, xmax, ymax = [round(coord.item(), 2) for coord in box.xyxy[0]]
+            csv_writer.writerow([img['filename'], xmin, ymin, xmax, ymax])
+
+    return csv_buffer.getvalue()
 
 # Inicializar estado de la sesión
 if 'uploaded_images' not in st.session_state:
@@ -88,7 +102,7 @@ if len(source_imgs) != 0:
     # Usar un selector para elegir la imagen a mostrar
     if len(st.session_state.uploaded_images) > 1:
         image_filenames = [img.name for img in st.session_state.uploaded_images]
-        selected_image = st.selectbox("Selecciona una imagen para visualizar:", image_filenames)
+        selected_image = st.selectbox("Selecciona la imagen que desea visualizar:", image_filenames)
 
         # Mostrar la imagen original correspondiente
         original_image_index = image_filenames.index(selected_image)
@@ -141,6 +155,9 @@ if len(source_imgs) != 0:
                         img_buffer = get_image_download_buffer(processed['image']).getvalue()
                         zip_file.writestr(processed['filename'], img_buffer)
 
+                    # Agregar el archivo CSV al ZIP
+                    zip_file.writestr('anotaciones.csv', write_csv(st.session_state.processed_images))
+
                 # Preparar el archivo ZIP para la descarga
                 zip_buffer.seek(0)  # Volver al inicio del buffer
                 zip_data = zip_buffer.getvalue()  # Convertir a bytes
@@ -152,7 +169,7 @@ if len(source_imgs) != 0:
                         help='Exportar imágenes procesadas y anotaciones',
                         label="Exportar",
                         data=zip_data,
-                        file_name="processed_images.zip",
+                        file_name="upd.zip",
                         mime="application/zip"
                     )
                 except Exception as ex:
