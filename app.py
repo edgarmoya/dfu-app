@@ -2,6 +2,8 @@ import streamlit as st
 from pathlib import Path
 import PIL
 import settings
+import zipfile
+import io
 from helper import load_model, get_image_download_buffer, draw_bounding_boxes
 
 def clear_session() -> None:
@@ -9,12 +11,16 @@ def clear_session() -> None:
         st.session_state.uploaded_images = []
     if 'processed_images' in st.session_state:
         st.session_state.processed_images = []  # Limpiar imágenes procesadas
+    st.session_state.analyzed = False  # Controla el procesamiento
 
 # Inicializar estado de la sesión
 if 'uploaded_images' not in st.session_state:
     st.session_state.uploaded_images = []
 if 'processed_images' not in st.session_state:
     st.session_state.processed_images = []
+# Control deslizante para la confianza del modelo
+if 'confidence' not in st.session_state:
+    st.session_state.confidence = 30  # Valor inicial de confianza
 
 # Configuración del diseño de la página
 st.set_page_config(
@@ -26,10 +32,6 @@ st.set_page_config(
 
 # Barra lateral
 st.sidebar.header("Configuración del modelo")
-
-# Control deslizante para la confianza del modelo
-if 'confidence' not in st.session_state:
-    st.session_state.confidence = 30  # Valor inicial
 
 # Control deslizante para la confianza del modelo
 confidence = st.sidebar.slider( 
@@ -80,21 +82,33 @@ if 'uploaded_images' in st.session_state:
 if len(source_imgs) != 0:
     st.session_state.uploaded_images = source_imgs
 
+    # Usar un selector para elegir la imagen a mostrar
+    if len(st.session_state.uploaded_images) > 1:
+        image_filenames = [img.name for img in st.session_state.uploaded_images]
+        selected_image = st.selectbox("Selecciona una imagen para visualizar:", image_filenames)
+
+        # Mostrar la imagen original correspondiente
+        original_image_index = image_filenames.index(selected_image)
+        source_img = source_imgs[original_image_index]
+    else:
+        selected_image = source_imgs[0].name
+        source_img = source_imgs[0]
+
     col1, col2 = st.columns(2)   # Crear dos columnas
 
     # Crear columnas para mostrar las imágenes
-    for source_img in source_imgs:
-        with col1:
-            try:
-                # Abrir y mostrar la imagen subida por el usuario
-                st.image(source_img, caption="Imagen original", use_column_width='auto')
-            except Exception as ex:
-                st.error("Ocurrió un error al abrir la imagen.")
-                st.error(ex)
+    with col1:
+        try:
+            # Abrir y mostrar la imagen subida por el usuario
+            st.image(source_img, caption="Imagen original", use_column_width='auto')
+        except Exception as ex:
+            st.error("Ocurrió un error al abrir la imagen.")
+            st.error(ex)
 
-        with col2:
-            if detect_button:  # Verifica si la imagen detectada no está en el estado
-                uploaded_image = PIL.Image.open(source_img)
+    with col2:
+        if detect_button:  # Verifica si la imagen detectada no está en el estado
+            for image in st.session_state.uploaded_images:
+                uploaded_image = PIL.Image.open(image)
                 res = model.predict(uploaded_image, conf=confidence/100, iou=iou_thres)  # Realiza la detección utilizando el modelo
                 bboxes = res[0].boxes
                 processed_image = draw_bounding_boxes(uploaded_image, res, {0: 'UPD'})
@@ -102,31 +116,46 @@ if len(source_imgs) != 0:
                 # Almacena la imagen procesada y las cajas en el estado de la sesión
                 st.session_state.processed_images.append({
                     'image': processed_image,
-                    'filename': source_img.name,
+                    'filename': image.name,
                     'boxes': bboxes
                 })
 
-            if len(st.session_state.processed_images) == len(st.session_state.uploaded_images):
-                # Muestra las imágenes procesadas
-                for processed in st.session_state.processed_images:
-                    st.image(processed['image'], caption=f'Ulceraciones detectadas en {processed["filename"]}', use_column_width='auto')
+        for processed in st.session_state.processed_images:
+            if processed['filename'] == selected_image:
+                st.image(processed['image'], caption='Ulceraciones detectadas', use_column_width='auto')
 
-                    if processed['boxes']:  # Verifica si hay cajas detectadas
-                        try:
-                            # Agrega un botón para descarga la imagen  
-                            st.download_button(
-                                use_container_width=True,
-                                label="Descargar imagen",
-                                data=get_image_download_buffer(processed['image']),  # Convierte la imagen a un buffer descargable
-                                file_name=f"det_{processed['filename']}",
-                                mime="image/jpeg",
-                                key=f"download_{processed['filename']}"  # Clave única para el botón de descarga
-                            )
-                        except Exception as ex:
-                            st.error("¡No se ha subido ninguna imagen aún!")
-                            st.error(ex)
-                    else:
-                        st.info('No se han detectado ulceraciones', icon="ℹ️")
+        if len(st.session_state.processed_images) == len(st.session_state.uploaded_images):
+            # Verifica si alguna imagen procesada tiene cajas
+            has_boxes = any(len(processed['boxes']) > 0 for processed in st.session_state.processed_images)
+
+            # Mostrar botón de descarga solo si alguna imagen tiene cajas
+            if has_boxes:
+                # Crear un archivo ZIP en memoria
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+                    for processed in st.session_state.processed_images:
+                        # Guardar cada imagen procesada en el ZIP
+                        img_buffer = get_image_download_buffer(processed['image']).getvalue()
+                        zip_file.writestr(processed['filename'], img_buffer)
+
+                # Preparar el archivo ZIP para la descarga
+                zip_buffer.seek(0)  # Volver al inicio del buffer
+                zip_data = zip_buffer.getvalue()  # Convertir a bytes
+
+                # Agrega un botón para descarga la imagen
+                try:  
+                    st.download_button(
+                        use_container_width=True,
+                        label="Descargar",
+                        data=zip_data,
+                        file_name="processed_images.zip",
+                        mime="application/zip"
+                    )
+                except Exception as ex:
+                    st.error("¡No se ha subido ninguna imagen aún!")
+                    st.error(ex)
+            else:
+                st.info('No se han detectado ulceraciones', icon="ℹ️")
 else:
     camera_svg = '''
         <svg xmlns="http://www.w3.org/2000/svg" fill="gray" viewBox="0 0 24 24" width="24" height="24">
