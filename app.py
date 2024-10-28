@@ -5,10 +5,16 @@ import settings
 from helper import load_model, get_image_download_buffer, draw_bounding_boxes
 
 def clear_session() -> None:
-    if 'res_plotted' in st.session_state:
-        del st.session_state.res_plotted
-    if 'boxes' in st.session_state:
-        del st.session_state.boxes
+    if 'uploaded_images' in st.session_state:
+        st.session_state.uploaded_images = []
+    if 'processed_images' in st.session_state:
+        st.session_state.processed_images = []  # Limpiar imágenes procesadas
+
+# Inicializar estado de la sesión
+if 'uploaded_images' not in st.session_state:
+    st.session_state.uploaded_images = []
+if 'processed_images' not in st.session_state:
+    st.session_state.processed_images = []
 
 # Configuración del diseño de la página
 st.set_page_config(
@@ -42,11 +48,16 @@ if confidence != st.session_state.confidence:
 iou_thres = 0.5
 
 # Cargador de archivos para seleccionar imágenes
-source_img = st.sidebar.file_uploader(
+source_imgs = st.sidebar.file_uploader(
     label="Seleccionar una imagen", 
     help='Imagen del pie que desea analizar', 
     type=("jpg", "jpeg", "png"), 
-    accept_multiple_files=False)
+    accept_multiple_files=True)
+
+# Botón para analizar las imágenes, mostrar solo cuando se carguen las imágenes
+if len(source_imgs) != 0:
+    text_btn = 'Analizar imágenes' if len(source_imgs) > 1 else 'Analizar imagen'
+    detect_button = st.sidebar.button(text_btn, use_container_width=True)  # Botón para iniciar la detección
 
 # Título de la página principal
 st.title("Detección de UPD")
@@ -62,52 +73,60 @@ except Exception as ex:
     st.error(ex)
 
 # Verificar si la imagen original ha cambiado
-if 'uploaded_image' in st.session_state:
-    if source_img is not None and st.session_state.uploaded_image != source_img:
+if 'uploaded_images' in st.session_state:
+    if source_imgs is not None and st.session_state.uploaded_images != source_imgs:
         clear_session()  # Limpia el estado de la sesión
 
-if source_img is not None:
-    st.session_state.uploaded_image = source_img
+if len(source_imgs) != 0:
+    st.session_state.uploaded_images = source_imgs
 
-    # Crear dos columnas
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2)   # Crear dos columnas
 
-    with col1:
-        try:
-            # Abrir y mostrar la imagen subida por el usuario
-            uploaded_image = PIL.Image.open(source_img)
-            st.image(source_img, caption="Imagen original", use_column_width='auto')
-        except Exception as ex:
-            st.error("Ocurrió un error al abrir la imagen.")
-            st.error(ex)
+    # Crear columnas para mostrar las imágenes
+    for source_img in source_imgs:
+        with col1:
+            try:
+                # Abrir y mostrar la imagen subida por el usuario
+                st.image(source_img, caption="Imagen original", use_column_width='auto')
+            except Exception as ex:
+                st.error("Ocurrió un error al abrir la imagen.")
+                st.error(ex)
 
-    with col2:
-        detect_button = st.sidebar.button('Analizar imagen', use_container_width=True)  # Botón para iniciar la detección
+        with col2:
+            if detect_button:  # Verifica si la imagen detectada no está en el estado
+                uploaded_image = PIL.Image.open(source_img)
+                res = model.predict(uploaded_image, conf=confidence/100, iou=iou_thres)  # Realiza la detección utilizando el modelo
+                bboxes = res[0].boxes
+                processed_image = draw_bounding_boxes(uploaded_image, res, {0: 'UPD'})
 
-        conf = confidence / 100
-        if 'res_plotted' not in st.session_state and detect_button:  # Verifica si la imagen detectada no está en el estado
-            res = model.predict(uploaded_image, conf=conf, iou=iou_thres)  # Realiza la detección utilizando el modelo
-            st.session_state.boxes = res[0].boxes  # Almacena las cajas detectadas en el estado de la sesión
-            st.session_state.res_plotted = draw_bounding_boxes(uploaded_image, res, {0: 'UPD'})
+                # Almacena la imagen procesada y las cajas en el estado de la sesión
+                st.session_state.processed_images.append({
+                    'image': processed_image,
+                    'filename': source_img.name,
+                    'boxes': bboxes
+                })
 
-        if 'res_plotted' in st.session_state:  # Verifica si hay una imagen procesada
-            st.image(st.session_state.res_plotted, caption='Ulceraciones detectadas', use_column_width='auto')  # Muestra la imagen procesada
+            if len(st.session_state.processed_images) == len(st.session_state.uploaded_images):
+                # Muestra las imágenes procesadas
+                for processed in st.session_state.processed_images:
+                    st.image(processed['image'], caption=f'Ulceraciones detectadas en {processed["filename"]}', use_column_width='auto')
 
-            if st.session_state.boxes:  # Verifica si hay cajas detectadas
-                try:
-                    # Agrega un botón para descarga la imagen  
-                    st.download_button(
-                        use_container_width=True,
-                        label="Descargar imagen",
-                        data=get_image_download_buffer(st.session_state.res_plotted),  # Convierte la imagen a un buffer descargable
-                        file_name=f"det_{source_img.name}",
-                        mime="image/jpeg"
-                    )
-                except Exception as ex:
-                    st.error("¡No se ha subido ninguna imagen aún!")
-                    st.error(ex)
-            else:
-                st.info('No se han detectado ulceraciones', icon="ℹ️")
+                    if processed['boxes']:  # Verifica si hay cajas detectadas
+                        try:
+                            # Agrega un botón para descarga la imagen  
+                            st.download_button(
+                                use_container_width=True,
+                                label="Descargar imagen",
+                                data=get_image_download_buffer(processed['image']),  # Convierte la imagen a un buffer descargable
+                                file_name=f"det_{processed['filename']}",
+                                mime="image/jpeg",
+                                key=f"download_{processed['filename']}"  # Clave única para el botón de descarga
+                            )
+                        except Exception as ex:
+                            st.error("¡No se ha subido ninguna imagen aún!")
+                            st.error(ex)
+                    else:
+                        st.info('No se han detectado ulceraciones', icon="ℹ️")
 else:
     camera_svg = '''
         <svg xmlns="http://www.w3.org/2000/svg" fill="gray" viewBox="0 0 24 24" width="24" height="24">
