@@ -59,7 +59,10 @@ source_imgs = st.sidebar.file_uploader(
 # Botón para analizar las imágenes, mostrar solo cuando se carguen las imágenes
 if len(source_imgs) != 0:
     text_btn = 'Analizar imágenes' if len(source_imgs) > 1 else 'Analizar imagen'
-    detect_button = st.sidebar.button(text_btn, use_container_width=True)  # Botón para iniciar la detección
+    detect_button = st.sidebar.button(  # Botón para iniciar la detección
+        label=text_btn, 
+        use_container_width=True,
+        help='Iniciar procesamiento de las imágenes cargadas')
 
 # Título de la página principal
 st.title("Detección de UPD")
@@ -143,10 +146,11 @@ if len(source_imgs) != 0:
                 zip_data = zip_buffer.getvalue()  # Convertir a bytes
 
                 # Agrega un botón para descarga la imagen
-                try:  
-                    st.download_button(
+                try:
+                    st.sidebar.download_button(
                         use_container_width=True,
-                        label="Descargar",
+                        help='Exportar imágenes procesadas y anotaciones',
+                        label="Exportar",
                         data=zip_data,
                         file_name="processed_images.zip",
                         mime="application/zip"
