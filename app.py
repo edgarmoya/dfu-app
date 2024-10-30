@@ -1,5 +1,5 @@
 import streamlit as st
-from helper import load_model, get_image_download_buffer, draw_bounding_boxes
+from helper import load_pt_model, get_image_download_buffer, draw_bounding_boxes
 from pathlib import Path
 import PIL
 import settings
@@ -7,6 +7,11 @@ import zipfile
 import io
 import csv
 from typing import List, Dict, Any
+
+@st.cache_resource
+def load_det_model(model_path):
+    """Carga el modelo de detección desde la ruta especificada."""
+    return load_pt_model(model_path)
 
 def clear_session() -> None:
     """Limpia las imágenes cargadas y procesadas del estado de sesión de Streamlit.
@@ -155,14 +160,11 @@ if __name__ == '__main__':
             use_container_width=True,
             help='Iniciar procesamiento de las imágenes cargadas')
 
-    # Ruta del modelo de detección
-    detection_model_path = Path(settings.DETECTION_MODEL)
-
     # Cargar el modelo
     try:
-        model = load_model(detection_model_path)
+        det_model = load_det_model(Path(settings.DETECTION_MODEL))
     except Exception as ex:
-        st.error(f"No se pudo cargar el modelo. Verifique la ruta especificada: {detection_model_path}")
+        st.error("No se pudo cargar el modelo. Verifique la ruta especificada")
         st.error(ex)
 
     # Verificar si la imagen original ha cambiado
@@ -199,7 +201,7 @@ if __name__ == '__main__':
         with col2:
             # Procesar imágenes al presionar el botón
             if detect_button:
-                process_images(model=model, 
+                process_images(model=det_model, 
                             confidence=st.session_state.confidence/100, 
                             iou_thres=iou_thres)
 

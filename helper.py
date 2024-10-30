@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib.cm import get_cmap
 from typing import List, Dict
 
-def load_model(model_path: str) -> YOLO:
+def load_pt_model(model_path: str) -> YOLO:
     """
     Carga un modelo de detección de objetos YOLO desde la ruta especificada.
 
