@@ -18,11 +18,11 @@ Este proyecto es un sistema de detección automática de úlceras del pie diabé
 ## Instalación
 1. Clona el repositorio:
 ```bash
-git clone https://github.com/edgarmoya/dfu-detection-app.git
+git clone https://github.com/edgarmoya/dfu-app.git
 ```
 2. Navega al directorio del proyecto:
 ```bash
-cd dfu-detection-app
+cd dfu-app
 ```
 3. Instala las dependencias:
 ```bash
