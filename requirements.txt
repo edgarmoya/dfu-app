@@ -1,4 +1,4 @@
-matplotlib
+keras==3.3.0
 numpy
 opencv_python
 opencv_python_headless
