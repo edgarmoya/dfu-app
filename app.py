@@ -1,6 +1,5 @@
 import streamlit as st
-from helper import load_pt_model, get_image_download_buffer, draw_bounding_boxes, crop_images
-from keras.api.models import load_model as load_h5_model
+from helper import load_pt_model, get_image_download_buffer, draw_bounding_boxes
 from pathlib import Path
 import numpy as np
 import PIL
@@ -14,11 +13,6 @@ from typing import List, Dict, Any
 def load_det_model(model_path):
     """Carga el modelo de detección desde la ruta especificada."""
     return load_pt_model(model_path)
-
-@st.cache_resource
-def load_clf_model(model_path):
-    """Carga el modelo de clasificación desde la ruta especificada."""
-    return load_h5_model(model_path)
 
 def initialize_session() -> None:
     """Inicializa el estado de la sesión de Streamlit."""
@@ -40,42 +34,39 @@ def clear_session() -> None:
     if 'processed_images' in st.session_state:
         st.session_state.processed_images = []  # Limpiar imágenes procesadas
 
-def write_csv(processed_images: List[Dict[str, Any]], classes_name: List[str]) -> str:
+def write_csv(processed_images: List[Dict[str, Any]]) -> str:
     """Genera un archivo CSV con las coordenadas de las cajas delimitadoras de las imágenes procesadas.
 
     Args:
         processed_images (List[Dict[str, Any]]): Lista de diccionarios donde cada diccionario contiene el
-            nombre de archivo, las cajas delimitadoras y las clasificaciones de una imagen procesada.
-        classes_name (List[str]): Nombre perteneciente a cada clase. 
+            nombre de archivo y las cajas delimitadoras de una imagen procesada.
 
     Returns:
-        str: El contenido del archivo CSV como una cadena de texto, con el nombre del archivo, 
-        las coordenadas de las cajas delimitadoras (xmin, ymin, xmax, ymax) y la clase para cada objeto detectado.
+        str: El contenido del archivo CSV como una cadena de texto, con el nombre del archivo
+        y las coordenadas de las cajas delimitadoras (xmin, ymin, xmax, ymax).
     """
     # Crear un archivo CSV en memoria para almacenar las coordenadas
     csv_buffer = io.StringIO()
     csv_writer = csv.writer(csv_buffer)
     # Escribir la cabecera del CSV
-    csv_writer.writerow(['filename', 'xmin', 'ymin', 'xmax', 'ymax', 'class'])
+    csv_writer.writerow(['filename', 'xmin', 'ymin', 'xmax', 'ymax'])
 
     for img in processed_images:
         # Procesar cada caja delimitadora y escribir las coordenadas redondeadas
-        for box, clf in zip(img['boxes'], img['classes']):
+        for box in img['boxes']:
             xmin, ymin, xmax, ymax = [round(coord.item(), 2) for coord in box.xyxy[0]]
-            csv_writer.writerow([img['filename'], xmin, ymin, xmax, ymax, classes_name[clf]])
+            csv_writer.writerow([img['filename'], xmin, ymin, xmax, ymax])
 
     # Devolver el contenido del CSV como una cadena de texto
     return csv_buffer.getvalue()
 
-def process_images(det_model, clf_model, confidence: float, iou_thres: float, classes_name: List[str]) -> None:
-    """Realiza la detección y clasificación de úlceras en las imágenes cargadas, almacenando los resultados procesados.
+def process_images(det_model, confidence: float, iou_thres: float) -> None:
+    """Realiza la detección de úlceras en las imágenes cargadas, almacenando los resultados procesados.
 
     Args:
         det_model: Modelo de detección YOLO utilizado para detectar úlceras en las imágenes.
-        clf_model: Modelo de clasificación utilizado para clasificar las áreas delimitadas por las cajas.
         confidence (float): Nivel de confianza mínimo para que el modelo considere una detección como válida.
         iou_thres (float): Umbral de IoU para aplicar la supresión de no máximos y eliminar detecciones duplicadas.
-        classes_name (List[str]): Nombre perteneciente a cada clase.
     """
     for image in st.session_state.uploaded_images:
         # Proceso de detección
@@ -83,28 +74,14 @@ def process_images(det_model, clf_model, confidence: float, iou_thres: float, cl
         det_res = det_model.predict(uploaded_image, conf=confidence, iou=iou_thres)  # Realiza la detección utilizando el modelo
         bboxes = det_res[0].boxes
 
-        # Proceso de clasificación
-        classes = []
-        cropped_images = crop_images(uploaded_image, bboxes)  # Recorta las regiones de interés
-        for cropped_image in cropped_images:
-            # Redimensiona y normaliza el recorte
-            resized_image = np.resize(cropped_image, (1, 224, 224, 3))
-            norm = resized_image / 255.0
-            
-            # Realiza la predicción y almacena el resultado
-            pre = clf_model.predict(norm)
-            pred = np.argmax(pre, axis=1)[0]
-            classes.append(pred)
-
         # Dibujar imagen
-        processed_image = draw_bounding_boxes(uploaded_image, det_res, classes, classes_name)
+        processed_image = draw_bounding_boxes(uploaded_image, det_res)
 
         # Almacena la imagen procesada y las cajas en el estado de la sesión
         st.session_state.processed_images.append({
             'image': processed_image,
             'filename': image.name,
-            'boxes': bboxes,
-            'classes': classes
+            'boxes': bboxes
         })
 
 def export_results(processed_images: List[Dict[str, Any]]) -> None:
@@ -123,7 +100,7 @@ def export_results(processed_images: List[Dict[str, Any]]) -> None:
             zip_file.writestr(processed['filename'], img_buffer)
 
         # Agregar el archivo CSV al ZIP
-        zip_file.writestr('anotaciones.csv', write_csv(processed_images, classes_name))
+        zip_file.writestr('anotaciones.csv', write_csv(processed_images))
 
     # Preparar el archivo ZIP para la descarga
     zip_buffer.seek(0)  # Volver al inicio del buffer
@@ -146,7 +123,6 @@ def export_results(processed_images: List[Dict[str, Any]]) -> None:
 if __name__ == '__main__':
     # Constantes
     iou_thres = 0.5  # NMS
-    classes_name = ['both', 'infection', 'ischaemia', 'none']  # Clases de las úlceras
 
     # Configuración del diseño de la página
     st.set_page_config(
@@ -157,7 +133,7 @@ if __name__ == '__main__':
     )
 
     # Título de la página principal
-    # st.title("Detección de UPD")
+    st.title("Detección de UPD")
 
     #Inicializar estado de la sesión
     initialize_session()
@@ -197,7 +173,6 @@ if __name__ == '__main__':
     # Cargar los modelos
     try:
         det_model = load_det_model(Path(settings.DETECTION_MODEL))
-        clf_model = load_clf_model(Path(settings.CLASS_MODEL))
     except Exception as ex:
         st.error("No se pudo cargar el modelo. Verifique la ruta especificada")
         st.error(ex)
@@ -238,10 +213,8 @@ if __name__ == '__main__':
             if process_image_button:
                 st.session_state.processed_images = []  # Limpiar imágenes procesadas
                 process_images(det_model=det_model,
-                            clf_model=clf_model,
                             confidence=st.session_state.confidence/100,
-                            iou_thres=iou_thres,
-                            classes_name=classes_name)
+                            iou_thres=iou_thres)
 
             # Mostrar imágenes procesadas
             for processed in st.session_state.processed_images:

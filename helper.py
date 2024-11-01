@@ -3,7 +3,6 @@ from io import BytesIO
 import cv2
 import PIL
 import numpy as np
-from PIL import Image
 from typing import List
 
 def load_pt_model(model_path: str) -> YOLO:
@@ -17,23 +16,6 @@ def load_pt_model(model_path: str) -> YOLO:
         YOLO: El modelo de detección de objetos YOLO cargado.
     """
     return YOLO(model_path)
-
-def crop_images(image: Image, bboxes: List) -> List:
-    """Recorta las regiones de la imagen según las cajas delimitadoras.
-
-    Args:
-        image (Image): Imagen original en formato PIL.
-        bboxes (List): Lista de cajas delimitadoras, donde cada caja es una tupla (xmin, ymin, xmax, ymax).
-
-    Returns:
-        List: Lista de imágenes recortadas correspondientes a cada caja delimitadora.
-    """
-    cropped_images = []
-    for bbox in bboxes:
-        xmin, ymin, xmax, ymax = map(int, bbox.xyxy[0])  # Convertir coordenadas a enteros
-        cropped_image = image.crop((xmin, ymin, xmax, ymax))  # Recorta la imagen según la caja delimitadora
-        cropped_images.append(cropped_image)  # Agrega el recorte a la lista
-    return cropped_images
 
 def get_image_download_buffer(img_array: np.ndarray) -> BytesIO:
     """
@@ -58,15 +40,13 @@ def get_image_download_buffer(img_array: np.ndarray) -> BytesIO:
     buffered.seek(0)
     return buffered
 
-def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int], classes_name: List[str]) -> np.ndarray:
+def draw_bounding_boxes(image: np.ndarray, det_results: List) -> np.ndarray:
     """
     Dibuja los cuadros delimitadores en la imagen según los resultados de la predicción.
 
     Args:
         image (numpy.ndarray): La imagen original en formato RGB en la que se dibujarán los cuadros.
         det_results (List): Resultados de la predicción del modelo YOLO, incluyendo las cajas, clases y confianza.
-        classes (List[int]): Resultados de la clasificación de cada caja delimitadora.
-        classes_name (List[str]): Nombre perteneciente a cada clase.
 
     Returns:
         numpy.ndarray: La imagen con los cuadros delimitadores dibujados, en formato RGB.
@@ -77,7 +57,7 @@ def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int]
     image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
     # Iterar sobre cada resultado de la predicción
-    for det_result, clf in zip(det_results, classes):
+    for det_result in det_results:
         boxes = det_result.boxes  # Cuadros delimitadores
         for box in boxes:
             # Obtener las coordenadas del cuadro delimitador
@@ -86,14 +66,13 @@ def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int]
             conf = box.conf[0]
 
             # Definir el texto con la etiqueta y la confianza
-            label_det = f'UPD {conf:.2f} {clf}'
-            label_clf = f'{classes_name[clf]}'
+            label_det = f'UPD {conf:.2f}'
             font_scale = 1.1  # Escala del texto
             font_thickness = 2  # Grosor del texto
             baseline = 3  # Margen inferior para ajustar el texto
 
             # Medir el tamaño del texto para dibujar el fondo del rectángulo de la etiqueta
-            (text_width, text_height), _ = cv2.getTextSize(label_clf, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+            (text_width, text_height), _ = cv2.getTextSize(label_det, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
 
             # Dibujar un rectángulo de fondo para el texto
             cv2.rectangle(image, (int(xmin), int(ymin) - text_height - baseline), 
@@ -105,7 +84,7 @@ def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int]
             cv2.rectangle(image, (int(xmin), int(ymin)), (int(xmax), int(ymax)), color, 3)
 
             # Dibujar el texto (etiqueta + confianza) en la imagen
-            cv2.putText(image, label_clf, (int(xmin), int(ymin) - baseline), cv2.FONT_HERSHEY_SIMPLEX, 
+            cv2.putText(image, label_det, (int(xmin), int(ymin) - baseline), cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, (255, 255, 255), font_thickness)
 
     # Convertir la imagen de nuevo a RGB antes de devolverla
