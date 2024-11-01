@@ -40,33 +40,34 @@ def clear_session() -> None:
     if 'processed_images' in st.session_state:
         st.session_state.processed_images = []  # Limpiar imágenes procesadas
 
-def write_csv(processed_images: List[Dict[str, Any]]) -> str:
+def write_csv(processed_images: List[Dict[str, Any]], classes_name: List[str]) -> str:
     """Genera un archivo CSV con las coordenadas de las cajas delimitadoras de las imágenes procesadas.
 
     Args:
-        processed_images (List[Dict[str, Any]]): Lista de diccionarios donde cada diccionario
-            contiene el nombre de archivo y las cajas delimitadoras de una imagen procesada. 
+        processed_images (List[Dict[str, Any]]): Lista de diccionarios donde cada diccionario contiene el
+            nombre de archivo, las cajas delimitadoras y las clasificaciones de una imagen procesada.
+        classes_name (List[str]): Nombre perteneciente a cada clase. 
 
     Returns:
-        str: El contenido del archivo CSV como una cadena de texto, con el nombre del archivo 
-        y las coordenadas de las cajas delimitadoras (xmin, ymin, xmax, ymax) para cada objeto detectado.
+        str: El contenido del archivo CSV como una cadena de texto, con el nombre del archivo, 
+        las coordenadas de las cajas delimitadoras (xmin, ymin, xmax, ymax) y la clase para cada objeto detectado.
     """
     # Crear un archivo CSV en memoria para almacenar las coordenadas
     csv_buffer = io.StringIO()
     csv_writer = csv.writer(csv_buffer)
     # Escribir la cabecera del CSV
-    csv_writer.writerow(['filename', 'xmin', 'ymin', 'xmax', 'ymax'])
+    csv_writer.writerow(['filename', 'xmin', 'ymin', 'xmax', 'ymax', 'class'])
 
     for img in processed_images:
         # Procesar cada caja delimitadora y escribir las coordenadas redondeadas
-        for box in img['boxes']:
+        for box, clf in zip(img['boxes'], img['classes']):
             xmin, ymin, xmax, ymax = [round(coord.item(), 2) for coord in box.xyxy[0]]
-            csv_writer.writerow([img['filename'], xmin, ymin, xmax, ymax])
+            csv_writer.writerow([img['filename'], xmin, ymin, xmax, ymax, classes_name[clf]])
 
     # Devolver el contenido del CSV como una cadena de texto
     return csv_buffer.getvalue()
 
-def process_images(det_model, clf_model, confidence: float, iou_thres: float) -> None:
+def process_images(det_model, clf_model, confidence: float, iou_thres: float, classes_name: List[str]) -> None:
     """Realiza la detección y clasificación de úlceras en las imágenes cargadas, almacenando los resultados procesados.
 
     Args:
@@ -74,6 +75,7 @@ def process_images(det_model, clf_model, confidence: float, iou_thres: float) ->
         clf_model: Modelo de clasificación utilizado para clasificar las áreas delimitadas por las cajas.
         confidence (float): Nivel de confianza mínimo para que el modelo considere una detección como válida.
         iou_thres (float): Umbral de IoU para aplicar la supresión de no máximos y eliminar detecciones duplicadas.
+        classes_name (List[str]): Nombre perteneciente a cada clase.
     """
     for image in st.session_state.uploaded_images:
         # Proceso de detección
@@ -95,7 +97,7 @@ def process_images(det_model, clf_model, confidence: float, iou_thres: float) ->
             classes.append(pred)
 
         # Dibujar imagen
-        processed_image = draw_bounding_boxes(uploaded_image, det_res, classes)
+        processed_image = draw_bounding_boxes(uploaded_image, det_res, classes, classes_name)
 
         # Almacena la imagen procesada y las cajas en el estado de la sesión
         st.session_state.processed_images.append({
@@ -121,7 +123,7 @@ def export_results(processed_images: List[Dict[str, Any]]) -> None:
             zip_file.writestr(processed['filename'], img_buffer)
 
         # Agregar el archivo CSV al ZIP
-        zip_file.writestr('anotaciones.csv', write_csv(processed_images))
+        zip_file.writestr('anotaciones.csv', write_csv(processed_images, classes_name))
 
     # Preparar el archivo ZIP para la descarga
     zip_buffer.seek(0)  # Volver al inicio del buffer
@@ -144,6 +146,7 @@ def export_results(processed_images: List[Dict[str, Any]]) -> None:
 if __name__ == '__main__':
     # Constantes
     iou_thres = 0.5  # NMS
+    classes_name = ['both', 'infection', 'ischaemia', 'none']  # Clases de las úlceras
 
     # Configuración del diseño de la página
     st.set_page_config(
@@ -237,7 +240,8 @@ if __name__ == '__main__':
                 process_images(det_model=det_model,
                             clf_model=clf_model,
                             confidence=st.session_state.confidence/100,
-                            iou_thres=iou_thres)
+                            iou_thres=iou_thres,
+                            classes_name=classes_name)
 
             # Mostrar imágenes procesadas
             for processed in st.session_state.processed_images:

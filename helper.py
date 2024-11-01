@@ -4,7 +4,7 @@ import cv2
 import PIL
 import numpy as np
 from PIL import Image
-from typing import List, Dict
+from typing import List
 
 def load_pt_model(model_path: str) -> YOLO:
     """
@@ -58,19 +58,19 @@ def get_image_download_buffer(img_array: np.ndarray) -> BytesIO:
     buffered.seek(0)
     return buffered
 
-def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int]) -> np.ndarray:
+def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int], classes_name: List[str]) -> np.ndarray:
     """
     Dibuja los cuadros delimitadores en la imagen según los resultados de la predicción.
 
     Args:
         image (numpy.ndarray): La imagen original en formato RGB en la que se dibujarán los cuadros.
         det_results (List): Resultados de la predicción del modelo YOLO, incluyendo las cajas, clases y confianza.
-        classes (List[int]): Diccionario que mapea las clases originales (int) a nuevas etiquetas (str).
+        classes (List[int]): Resultados de la clasificación de cada caja delimitadora.
+        classes_name (List[str]): Nombre perteneciente a cada clase.
 
     Returns:
         numpy.ndarray: La imagen con los cuadros delimitadores dibujados, en formato RGB.
     """
-    classes_name = ['both', 'infection', 'ischaemia', 'none']  # Clases de las úlceras
     color = (124, 80, 0)   # Color de las cajas
 
     # Convertir la imagen de RGB a BGR (porque OpenCV usa BGR)
