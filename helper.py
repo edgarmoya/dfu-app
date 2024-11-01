@@ -3,7 +3,7 @@ from io import BytesIO
 import cv2
 import PIL
 import numpy as np
-from matplotlib.cm import get_cmap
+from PIL import Image
 from typing import List, Dict
 
 def load_pt_model(model_path: str) -> YOLO:
@@ -17,6 +17,23 @@ def load_pt_model(model_path: str) -> YOLO:
         YOLO: El modelo de detección de objetos YOLO cargado.
     """
     return YOLO(model_path)
+
+def crop_images(image: Image, bboxes: List) -> List:
+    """Recorta las regiones de la imagen según las cajas delimitadoras.
+
+    Args:
+        image (Image): Imagen original en formato PIL.
+        bboxes (List): Lista de cajas delimitadoras, donde cada caja es una tupla (xmin, ymin, xmax, ymax).
+
+    Returns:
+        List: Lista de imágenes recortadas correspondientes a cada caja delimitadora.
+    """
+    cropped_images = []
+    for bbox in bboxes:
+        xmin, ymin, xmax, ymax = map(int, bbox.xyxy[0])  # Convertir coordenadas a enteros
+        cropped_image = image.crop((xmin, ymin, xmax, ymax))  # Recorta la imagen según la caja delimitadora
+        cropped_images.append(cropped_image)  # Agrega el recorte a la lista
+    return cropped_images
 
 def get_image_download_buffer(img_array: np.ndarray) -> BytesIO:
     """
@@ -41,51 +58,42 @@ def get_image_download_buffer(img_array: np.ndarray) -> BytesIO:
     buffered.seek(0)
     return buffered
 
-def draw_bounding_boxes(image: np.ndarray, results: List, classes: Dict[int, str]) -> np.ndarray:
+def draw_bounding_boxes(image: np.ndarray, det_results: List, classes: List[int]) -> np.ndarray:
     """
     Dibuja los cuadros delimitadores en la imagen según los resultados de la predicción.
 
     Args:
         image (numpy.ndarray): La imagen original en formato RGB en la que se dibujarán los cuadros.
-        results (List): Resultados de la predicción del modelo YOLO, incluyendo las cajas, clases y confianza.
-        classes (Dict[int, str]): Diccionario que mapea las clases originales (int) a nuevas etiquetas (str).
+        det_results (List): Resultados de la predicción del modelo YOLO, incluyendo las cajas, clases y confianza.
+        classes (List[int]): Diccionario que mapea las clases originales (int) a nuevas etiquetas (str).
 
     Returns:
         numpy.ndarray: La imagen con los cuadros delimitadores dibujados, en formato RGB.
     """
-    # Obtener un colormap de 'Set1'
-    cmap = get_cmap('Set1')
+    classes_name = ['both', 'infection', 'ischaemia', 'none']  # Clases de las úlceras
+    color = (124, 80, 0)   # Color de las cajas
 
     # Convertir la imagen de RGB a BGR (porque OpenCV usa BGR)
     image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
 
     # Iterar sobre cada resultado de la predicción
-    for result in results:
-        boxes = result.boxes  # Cuadros delimitadores
-        for i, box in enumerate(boxes):
+    for det_result, clf in zip(det_results, classes):
+        boxes = det_result.boxes  # Cuadros delimitadores
+        for box in boxes:
             # Obtener las coordenadas del cuadro delimitador
             xmin, ymin, xmax, ymax = box.xyxy[0]  
             # Obtener la confianza del modelo
             conf = box.conf[0]
-            # Obtener la clase original del objeto
-            cls = int(box.cls[0])
-            
-            # Obtener un color del colormap normalizado para este cuadro
-            cmap_color = cmap(i / len(boxes))  
-            color = (int(cmap_color[2] * 255), int(cmap_color[1] * 255), int(cmap_color[0] * 255))  # Convertir a BGR
-            color = (124, 80, 0)
-            
-            # Obtener la nueva etiqueta de clase mapeada desde el diccionario
-            new_label = classes.get(cls, 'None')  # Si no existe la clase, asignar 'None'
 
             # Definir el texto con la etiqueta y la confianza
-            label = f'{new_label} {conf:.2f}'
+            label_det = f'UPD {conf:.2f} {clf}'
+            label_clf = f'{classes_name[clf]}'
             font_scale = 1.1  # Escala del texto
             font_thickness = 2  # Grosor del texto
             baseline = 3  # Margen inferior para ajustar el texto
 
             # Medir el tamaño del texto para dibujar el fondo del rectángulo de la etiqueta
-            (text_width, text_height), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+            (text_width, text_height), _ = cv2.getTextSize(label_clf, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
 
             # Dibujar un rectángulo de fondo para el texto
             cv2.rectangle(image, (int(xmin), int(ymin) - text_height - baseline), 
@@ -97,7 +105,7 @@ def draw_bounding_boxes(image: np.ndarray, results: List, classes: Dict[int, str
             cv2.rectangle(image, (int(xmin), int(ymin)), (int(xmax), int(ymax)), color, 3)
 
             # Dibujar el texto (etiqueta + confianza) en la imagen
-            cv2.putText(image, label, (int(xmin), int(ymin) - baseline), cv2.FONT_HERSHEY_SIMPLEX, 
+            cv2.putText(image, label_clf, (int(xmin), int(ymin) - baseline), cv2.FONT_HERSHEY_SIMPLEX, 
                         font_scale, (255, 255, 255), font_thickness)
 
     # Convertir la imagen de nuevo a RGB antes de devolverla

@@ -1,6 +1,8 @@
 import streamlit as st
-from helper import load_pt_model, get_image_download_buffer, draw_bounding_boxes
+from helper import load_pt_model, get_image_download_buffer, draw_bounding_boxes, crop_images
+from keras.api.models import load_model as load_h5_model
 from pathlib import Path
+import numpy as np
 import PIL
 import settings
 import zipfile
@@ -12,6 +14,20 @@ from typing import List, Dict, Any
 def load_det_model(model_path):
     """Carga el modelo de detección desde la ruta especificada."""
     return load_pt_model(model_path)
+
+@st.cache_resource
+def load_clf_model(model_path):
+    """Carga el modelo de clasificación desde la ruta especificada."""
+    return load_h5_model(model_path)
+
+def initialize_session() -> None:
+    """Inicializa el estado de la sesión de Streamlit."""
+    if 'uploaded_images' not in st.session_state:
+        st.session_state.uploaded_images = []
+    if 'processed_images' not in st.session_state:
+        st.session_state.processed_images = []
+    if 'confidence' not in st.session_state:
+        st.session_state.confidence = 30  # Valor inicial de confianza
 
 def clear_session() -> None:
     """Limpia las imágenes cargadas y procesadas del estado de sesión de Streamlit.
@@ -50,28 +66,43 @@ def write_csv(processed_images: List[Dict[str, Any]]) -> str:
     # Devolver el contenido del CSV como una cadena de texto
     return csv_buffer.getvalue()
 
-def initialize_session() -> None:
-    """Inicializa el estado de la sesión de Streamlit."""
-    if 'uploaded_images' not in st.session_state:
-        st.session_state.uploaded_images = []
-    if 'processed_images' not in st.session_state:
-        st.session_state.processed_images = []
-    if 'confidence' not in st.session_state:
-        st.session_state.confidence = 30  # Valor inicial de confianza
+def process_images(det_model, clf_model, confidence: float, iou_thres: float) -> None:
+    """Realiza la detección y clasificación de úlceras en las imágenes cargadas, almacenando los resultados procesados.
 
-def process_images(model, confidence: float, iou_thres: float) -> None:
-    """Realiza la detección en las imágenes subidas utilizando el modelo de detección."""
+    Args:
+        det_model: Modelo de detección YOLO utilizado para detectar úlceras en las imágenes.
+        clf_model: Modelo de clasificación utilizado para clasificar las áreas delimitadas por las cajas.
+        confidence (float): Nivel de confianza mínimo para que el modelo considere una detección como válida.
+        iou_thres (float): Umbral de IoU para aplicar la supresión de no máximos y eliminar detecciones duplicadas.
+    """
     for image in st.session_state.uploaded_images:
+        # Proceso de detección
         uploaded_image = PIL.Image.open(image)
-        res = model.predict(uploaded_image, conf=confidence, iou=iou_thres)  # Realiza la detección utilizando el modelo
-        bboxes = res[0].boxes
-        processed_image = draw_bounding_boxes(uploaded_image, res, {0: 'UPD'})
+        det_res = det_model.predict(uploaded_image, conf=confidence, iou=iou_thres)  # Realiza la detección utilizando el modelo
+        bboxes = det_res[0].boxes
+
+        # Proceso de clasificación
+        classes = []
+        cropped_images = crop_images(uploaded_image, bboxes)  # Recorta las regiones de interés
+        for cropped_image in cropped_images:
+            # Redimensiona y normaliza el recorte
+            resized_image = np.resize(cropped_image, (1, 224, 224, 3))
+            norm = resized_image / 255.0
+            
+            # Realiza la predicción y almacena el resultado
+            pre = clf_model.predict(norm)
+            pred = np.argmax(pre, axis=1)[0]
+            classes.append(pred)
+
+        # Dibujar imagen
+        processed_image = draw_bounding_boxes(uploaded_image, det_res, classes)
 
         # Almacena la imagen procesada y las cajas en el estado de la sesión
         st.session_state.processed_images.append({
             'image': processed_image,
             'filename': image.name,
-            'boxes': bboxes
+            'boxes': bboxes,
+            'classes': classes
         })
 
 def export_results(processed_images: List[Dict[str, Any]]) -> None:
@@ -111,8 +142,8 @@ def export_results(processed_images: List[Dict[str, Any]]) -> None:
         st.error(ex)
 
 if __name__ == '__main__':
-    # NMS
-    iou_thres = 0.5
+    # Constantes
+    iou_thres = 0.5  # NMS
 
     # Configuración del diseño de la página
     st.set_page_config(
@@ -123,7 +154,7 @@ if __name__ == '__main__':
     )
 
     # Título de la página principal
-    st.title("Detección de UPD")
+    # st.title("Detección de UPD")
 
     #Inicializar estado de la sesión
     initialize_session()
@@ -155,14 +186,15 @@ if __name__ == '__main__':
     # Botón para analizar las imágenes, mostrar solo cuando se carguen las imágenes
     if len(source_imgs) != 0:
         text_btn = 'Analizar imágenes' if len(source_imgs) > 1 else 'Analizar imagen'
-        detect_button = st.sidebar.button(  # Botón para iniciar la detección
+        process_image_button = st.sidebar.button(  # Botón para iniciar la detección
             label=text_btn, 
             use_container_width=True,
             help='Iniciar procesamiento de las imágenes cargadas')
 
-    # Cargar el modelo
+    # Cargar los modelos
     try:
         det_model = load_det_model(Path(settings.DETECTION_MODEL))
+        clf_model = load_clf_model(Path(settings.CLASS_MODEL))
     except Exception as ex:
         st.error("No se pudo cargar el modelo. Verifique la ruta especificada")
         st.error(ex)
@@ -200,9 +232,11 @@ if __name__ == '__main__':
 
         with col2:
             # Procesar imágenes al presionar el botón
-            if detect_button:
-                process_images(model=det_model, 
-                            confidence=st.session_state.confidence/100, 
+            if process_image_button:
+                st.session_state.processed_images = []  # Limpiar imágenes procesadas
+                process_images(det_model=det_model,
+                            clf_model=clf_model,
+                            confidence=st.session_state.confidence/100,
                             iou_thres=iou_thres)
 
             # Mostrar imágenes procesadas
